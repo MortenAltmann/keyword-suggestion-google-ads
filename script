@@ -1,0 +1,76 @@
+function main() {
+  
+  //template url: https://docs.google.com/spreadsheets/d/1MwZQClL2Wlk844yCPNQd93Ari9d5uWmDg7ZmWNANxVM/edit#gid=0
+  var sheetUrl = "Insert_URL"
+  var startDate = ""; // Replace with your desired start date in the format 'yyyy-mm-dd' or leave it empty for "last X days"
+  var numberOfDaysAgo = 90; // Change this value to specify the number of days in the past for "last X days"
+  var today = new Date();
+
+  if (!startDate) {
+    startDate = new Date(today.getTime() - numberOfDaysAgo * 24 * 60 * 60 * 1000); // Calculate the start date for "last X days"
+  } else {
+    startDate = new Date(startDate); // Parse the specified start date
+  }
+
+  // Replace 'YOUR_EXISTING_SHEET_URL' with the URL of your existing Google Sheet
+  var sheet = SpreadsheetApp.openByUrl(sheetUrl).getActiveSheet();
+
+  // Clear the existing values in the sheet
+  sheet.clearContents();
+
+  sheet.appendRow(["Campaign Name", "Ad Group Name", "Search Term", "Keyword", "Match Type", "Impressions", "Clicks", "Cost", "Conversions", "Conversion Value", "Match Percentage"]);
+
+  // Create a set to track unique combinations of search term and keyword
+  var uniqueCombinations = new Set();
+
+  var report = AdsApp.report("SELECT CampaignName, AdGroupName, Query, KeywordTextMatchingQuery, QueryMatchTypeWithVariant, Impressions, Clicks, Cost, Conversions, ConversionValue " +
+                             "FROM   SEARCH_QUERY_PERFORMANCE_REPORT " +
+                             "WHERE  Impressions > 0 AND QueryTargetingStatus = 'NONE' AND Clicks > 0 AND CampaignStatus = 'ENABLED' " +
+                             "DURING " + formatDate(startDate) + ", " + formatDate(today));
+
+  var rows = report.rows();
+  while (rows.hasNext()) {
+    var row = rows.next();
+    var campaignName = row["CampaignName"];
+    var adGroupName = row["AdGroupName"];
+    var searchTerm = row["Query"];
+    var matchType = row["QueryMatchTypeWithVariant"]; 
+    var impressions = row["Impressions"];
+    var clicks = row["Clicks"];
+    var keyword = row["KeywordTextMatchingQuery"];
+    var cost = row["Cost"];
+    var conversions = row["Conversions"];
+    var conversionValue = row["ConversionValue"];
+
+    // Calculate Jaccard Similarity
+    var matchPercentage = calculateJaccardSimilarity(keyword, searchTerm);
+
+    // Create a unique key by combining search term and keyword
+    var combinationKey = searchTerm + "|" + keyword;
+
+    // Check if the combination is unique
+    if (!uniqueCombinations.has(combinationKey)) {
+      // Export the data to the sheet
+      sheet.appendRow([campaignName, adGroupName, searchTerm, keyword, matchType, impressions, clicks, cost, conversions, conversionValue, matchPercentage]);
+      uniqueCombinations.add(combinationKey); // Add the combination to the set of unique combinations
+    }
+  }
+}
+
+function formatDate(date) {
+  var year = date.getFullYear();
+  var month = (date.getMonth() + 1).toString().padStart(2, '0');
+  var day = date.getDate().toString().padStart(2, '0');
+  return year + month + day;
+}
+
+function calculateJaccardSimilarity(str1, str2) {
+    const set1 = new Set(str1.split(''));
+    const set2 = new Set(str2.split(''));
+
+    const intersection = new Set([...set1].filter(char => set2.has(char)));
+    const union = new Set([...set1, ...set2]);
+
+    const similarity = intersection.size / union.size;
+    return similarity;
+}
